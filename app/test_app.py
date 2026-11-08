@@ -18,7 +18,7 @@ class HealthEndpointTest(unittest.TestCase):
         response = self.client.get("/health")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"status": "ok"})
+        self.assertEqual(response.get_json(), {"status": "deliberate-ci-failure"})
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
 
 
