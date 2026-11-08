@@ -1,0 +1,84 @@
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  app:
+    build: ./app
+    environment:
+      REDIS_HOST: redis
+      AWS_REGION: ${AWS_REGION:-}
+      JWT_SIGNING_KEY_PARAMETER: ${JWT_SIGNING_KEY_PARAMETER:-}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+      JWT_ISSUER: ${JWT_ISSUER:-cloud-operations}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-orders-api}
+    deploy:
+      replicas: 3
+    volumes:
+      - applogs:/var/log/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  lb:
+    build: ./nginx
+    ports: ["8000:80"]
+    depends_on: [app]
+
+  loadgen:
+    build: ./loadgen
+    environment:
+      TARGET: http://lb
+      AWS_REGION: ${AWS_REGION:-}
+      JWT_SIGNING_KEY_PARAMETER: ${JWT_SIGNING_KEY_PARAMETER:-}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
+      JWT_ISSUER: ${JWT_ISSUER:-cloud-operations}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-orders-api}
+      WORKERS: ${WORKERS:-4}
+      THINK_MS: ${THINK_MS:-300}
+    depends_on: [lb]
+
+  prometheus:
+    build: ./prometheus
+    ports: ["9090:9090"]
+    depends_on: [alertmanager]
+
+  alertmanager:
+    build: ./alertmanager
+    ports: ["9093:9093"]
+    depends_on: [webhook]
+
+  webhook:
+    build: ./webhook
+    ports: ["5050:5001"]
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+
+  loki:
+    build: ./loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports: ["3100:3100"]
+
+  promtail:
+    build: ./promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - applogs:/var/log/app:ro
+    depends_on: [loki]
+
+  grafana:
+    build: ./grafana
+    ports: ["3000:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    depends_on: [prometheus, loki]
+
+volumes:
+  applogs:

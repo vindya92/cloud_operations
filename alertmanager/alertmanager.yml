@@ -1,0 +1,17 @@
+route:
+  receiver: webhook
+  group_by: ["alertname"]
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 1h
+
+receivers:
+  - name: webhook
+    webhook_configs:
+      - url: http://webhook:5001/alert
+        send_resolved: true
+
+# If the app is down, suppress the symptom alerts it causes.
+inhibit_rules:
+  - source_matchers: ["alertname = AppDown"]
+    target_matchers: ["alertname =~ HighErrorRate|HighLatencyP95"]

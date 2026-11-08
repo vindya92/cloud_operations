@@ -1,0 +1,52 @@
+groups:
+  - name: orders-api
+    rules:
+      - alert: AppDown
+        expr: absent(up{job="app"} == 1)
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "orders-api is down (no healthy replicas)"
+          runbook: "docs/runbook.md#appdown"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[1m]))
+            / sum(rate(http_requests_total[1m])) > 0.10
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 10% of requests are failing with 5xx"
+          runbook: "docs/runbook.md#higherrorrate"
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{endpoint!="/api/slow"}[1m]))) > 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 1s"
+          runbook: "docs/runbook.md#highlatencyp95"
+
+      - alert: ScaleOutNeeded
+        expr: avg(http_requests_in_flight{job="app"}) > 5
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Replicas are saturated (avg in-flight requests per replica above 5 of 8 threads); add replicas"
+          runbook: "docs/runbook.md#scaleoutneeded"
+
+  - name: host
+    rules:
+      - alert: HostHighCPU
+        expr: 100 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100 > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU above 80%"
